@@ -1,0 +1,27 @@
+ DELETE  SNV1.ST.KA.BK.ARCUEN.V
+   IF MAXCC = 8 -
+     THEN SET MAXCC = 0
+   DEFINE CLUSTER                                                     -
+              (  NAME(   SNV1.ST.KA.BK.ARCUEN.V)                      -
+   INDEXED                                                            -
+   FREESPACE(1 1)                                                     -
+   NOIMBED                                                            -
+   KEYS(9 0)                                                          -
+   RECORDSIZE(100 100)                                                -
+   NOREPLICATE                                                        -
+   REUSE                                                              -
+   SHAREOPTIONS(2 3)                                                  -
+   NONSPANNED                                                         -
+            )    /* END OF CLUSTER */                                 -
+          DATA                                                        -
+              (  NAME(   SNV1.ST.KA.BK.ARCUEN.V.DATA)                 -
+   TRACKS(20 20)                                                      -
+   VOLUMES (BB1O01 BB1O02)                        -
+   CISZ(6144)                                                         -
+   SPEED                                                              -
+            )    /* END OF DATA */                                    -
+          INDEX                                                       -
+              (  NAME(   SNV1.ST.KA.BK.ARCUEN.V.INDEX)                -
+   TRACKS(1 1)                                                        -
+   CISZ(512)                                                          -
+            )    /* END OF INDEX */
