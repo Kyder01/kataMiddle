@@ -69,6 +69,7 @@ El proceso batch realiza:
 Contiene las cuentas procesadas correctamente:
 
 ACC001|SALDO|800
+
 ACC002|SALDO|500
 
 ---
@@ -111,6 +112,7 @@ Permite consultar el saldo disponible de una cuenta.
 **Ejemplo:**
 
 CUENTA ACC001
+
 SALDO   800.00
 
 ---
@@ -132,11 +134,13 @@ Permite realizar un retiro de dinero desde una cuenta bancaria.
 **Ejemplo de operación exitosa:**
 
 CUENTA ACC001
+
 VLR RETIRO 100.00
 
 En pantalla aparece la cuenta ya actualizada:
 
 CUENTA ACC001
+
 SALDO  700.00
 
 ---
@@ -166,4 +170,4 @@ Cuando una validación falla:
 ---
 
 **Autor:** David Esteban Restrepo Parra  
-**Módulo:** Online – CICS 
+**Módulo:** Batch / Online – CICS 
