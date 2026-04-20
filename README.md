@@ -1,2 +1,2 @@
 # kataMiddle
-Repo KATA Middle COBOL BATCH/CICS
+Kata middle COBOL BATCH / CICS

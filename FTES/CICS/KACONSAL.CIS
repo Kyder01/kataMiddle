@@ -1,0 +1,288 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID.  KACONSAL.
+       AUTHOR. DAVID ESTEBAN RESTREPO PARRA
+       INSTALLATION. BANCO DE BOGOTA.
+       DATE-WRITTEN. ABRIL 2026.
+       ENVIRONMENT DIVISION.
+      *****************************************************************
+      * PROGRAMA QUE SE ENCARGA DE REALIZAR CONSULTA Y ACTUALIZACION  *
+      * DEL ARCHIVO LINEA ARCUEN                                      *
+      *****************************************************************
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       77  SI-MODULE-INFO            PIC X(64)
+           VALUE 'KACONSAL  -----TSD-             03/22/13  14.32.15'.
+       77  SI-DATE-TIME              PIC X(32)
+                                     VALUE '03/10/05  14.01.27 '.
+       77  LCP-WS-ADDR-COMP          PIC S9(8) COMP.
+       77  LCP-WS-ADDR-PNTR          REDEFINES LCP-WS-ADDR-COMP
+                                     USAGE POINTER.
+
+       77  WSCA-INPUT-DATA-LENGTH    PIC S9(4) COMP VALUE +100.
+       77  WS-LONG-ARCH              PIC S9(4) COMP VALUE +100.
+       77  WS-LONG-LLAVE             PIC S9(4) COMP VALUE +9.
+       77  RESPONSE-CODE             PIC S9(8) COMP VALUE ZEROS.
+       77  RESPONSE-CODE2            PIC S9(8) COMP VALUE ZEROS.
+       01  WS-ARCH                   PIC X(8)  VALUE 'ARCUEN  '.
+       01  WS-CALCULO-SALDO          PIC S9(13)V99 VALUE ZEROS.
+
+      *****************************************************************
+      *    ARCHIVO DE SALDOS                                          *
+      *****************************************************************
+       01  REG-SALDOS.
+           03 REG-LLAVE.
+              05 REG-CUENTA   PIC 9(9).
+           03 REG-DESC        PIC X(5).
+           03 REG-VLR-SALDO   PIC 9(13)V99.
+           03 FILLER          PIC X(71) VALUE SPACES.
+       01  REG-SALIDA.
+           03 SAL-CUENTA      PIC 9(9).
+           03 SAL-SALDO       PIC 9(13)V99.
+           03 FILLER          PIC X(76) VALUE SPACES.
+      *****************************************************************
+      *    AREA DEFINICION RESPUESTAS CICS                            *
+      *****************************************************************
+       01  RESPUESTAS-CICS.
+           10  WS-CICS-RESP            PIC S9(08) COMP VALUE 0.
+               88 WS-CICS-OK           VALUE DFHRESP(NORMAL).
+               88 WS-CICS-NOTFND       VALUE DFHRESP(NOTFND).
+               88 WS-CICS-IOERR        VALUE DFHRESP(IOERR).
+               88 WS-CICS-NOTOPEN      VALUE DFHRESP(NOTOPEN).
+               88 WS-CICS-DISABLED     VALUE DFHRESP(DISABLED).
+      *        88 WS-CICS-DUPREC       VALUE DFHRESP(DUPREC).
+      *        88 WS-CICS-QIDERR       VALUE DFHRESP(QIDERR).
+               88 WS-CICS-ERROR        VALUE
+                          DFHRESP(ERROR) THRU 255.
+           10  WS-CICS-RESP2           PIC S9(08) COMP VALUE 0.
+       01  WS-CICS-RESP-TEXT           PIC 9(08) VALUE 0.
+       01  WS-CICS-RESP2-TEXT          PIC 9(08) VALUE 0.
+       01  TSWMS-MESSAGE-DATA-AREA.
+           COPY TSTS1WMS.
+           COPY SIWSLKCA.
+           COPY TSTS1UTF.
+           COPY TSTS1UDT.
+
+      *****************************************************************
+      *    AREA LINKAGE                                               *
+      *****************************************************************
+       LINKAGE SECTION.
+
+       01  DFHCOMMAREA.
+           COPY TSTS1NCA.
+           COPY TSTS1BLL.
+           COPY TSTS1EOR.
+           COPY TSTS1TSC.
+       01  WRK-INQ-PDA-ALL   REDEFINES TSCB-PDA PIC X(100).
+       01  WRK-INQ-PDA       REDEFINES WRK-INQ-PDA-ALL.
+           03 WK-CUENTA      PIC 9(9).
+           03 WK-VLR-RETIRO  PIC 9(13)V99.
+           03 WK-OPT         PIC X.
+           03 WK-FILLER      PIC X(75).
+      *****************************************************************
+      *    RUTINA PRINCIPAL                                           *
+      *****************************************************************
+       PROCEDURE DIVISION.
+
+       0000-10-HANDLE-CONDITION.
+
+           EXEC CICS HANDLE CONDITION ERROR   (9000-00-ERROR)
+                                      PGMIDERR (9000-90-PGMIDERR)
+                                      END-EXEC.
+
+           COPY TSTS1ADR.
+
+      ******************************************************************
+      *    INITIALIZE WORKING STORAGE FIELDS
+      ******************************************************************
+
+           MOVE 'KACONSAL'                   TO TSWMS-MSG-PROG-ID.
+           MOVE TSCB-STM-PCA-OCC-INPROC      TO TSWMS-SUB1.
+           MOVE TSNCA-MDA-OCCURRENCE-IN-PROC TO TSWMS-MSG-NUMBER.
+           MOVE SPACES                       TO TSUTF-DATA.
+           MOVE LOW-VALUES                   TO TSUDT-ENTRIES.
+
+      ******************************************************************
+      *    MAKE SURE THAT THE PCA LENGTH IS A MULTIPLE OF THE
+      *    EXPECTED INPUT CARD LENGTH. IF NOT, GET OUT NOW.
+      ******************************************************************
+
+           COMPUTE TSWMS-SUB2 EQUAL TSCB-PCA-LENGTH-PDA (TSWMS-SUB1)
+                                    / WSCA-INPUT-DATA-LENGTH.
+           COMPUTE TSWMS-SUB2 EQUAL WSCA-INPUT-DATA-LENGTH * TSWMS-SUB2.
+
+           IF TSWMS-SUB2 NOT EQUAL TSCB-PCA-LENGTH-PDA (TSWMS-SUB1)
+              MOVE 'TS0292'             TO TSWMS-MSG-CODE
+              GO TO 9000-20-PROCESS-THE-ERROR
+           END-IF.
+
+      ******************************************************************
+      *    ESTABLISH ADDRESSES                                         *
+      ******************************************************************
+
+           MOVE TSCB-PCA-START-ADDR-PDA (TSWMS-SUB1) TO LCP-WS-ADDR-COMP
+           SET ADDRESS OF TSCB-PDA TO LCP-WS-ADDR-PNTR.
+           SET LCP-WS-ADDR-PNTR TO ADDRESS OF TSCB-PDA
+           SUBTRACT WSCA-INPUT-DATA-LENGTH FROM LCP-WS-ADDR-COMP
+           SET ADDRESS OF TSCB-PDA TO LCP-WS-ADDR-PNTR.
+
+           ADD WSCA-INPUT-DATA-LENGTH TO TSWMS-PDA-OFFSET
+                                         LCP-WS-ADDR-COMP.
+           SET ADDRESS OF TSCB-PDA TO LCP-WS-ADDR-PNTR.
+
+           IF TSWMS-PDA-OFFSET GREATER THAN
+                                 TSCB-PCA-LENGTH-PDA (TSWMS-SUB1)
+              GO TO 3000-00-ESTABLISH-ADDRESSES
+           END-IF.
+
+
+       3000-00-ESTABLISH-ADDRESSES.
+
+       COPY TSTS1KDA.
+       3200-00-FILE-PTR-LOOP.
+
+      ******************************************************************
+      *    GET ADDRESS FOR EACH RECORD THAT SHOULD HAVE BEEN READ
+      *    BY FLOW CONTROL
+      ******************************************************************
+
+           SET TSUTF-IND UP BY +1.
+
+           IF TSUTF-IND GREATER THAN TSUTF-ENTRIES-USED
+              GO TO 3200-05-FILE-PTR-LOOP-END
+           END-IF
+
+           GO TO 3200-00-FILE-PTR-LOOP.
+
+       3200-05-FILE-PTR-LOOP-END.
+
+      ******************************************************************
+      * ESTABLISH ADDRESSABILITY TO TS RECORD TABLE                    *
+      ******************************************************************
+       3300-00-ADDITIONAL-EDITING.
+           IF WK-OPT = 'I'
+              PERFORM 6300-40-INQUIR-FIELDS    THRU 6300-40-FIN
+           ELSE
+              IF WK-OPT = 'W'
+                 PERFORM 6300-20-UPDATE-FIELDS THRU 6300-20-FIN
+              ELSE
+                 MOVE 'ERROR OPCION INVALIDA:  ' TO TSWMS-MSG-VAR1
+                 MOVE  WS-CICS-RESP              TO WS-CICS-RESP-TEXT
+                 MOVE  WS-CICS-RESP2             TO WS-CICS-RESP2-TEXT
+                 STRING WS-CICS-RESP-TEXT  DELIMITED BY SIZE
+                        ';'                DELIMITED BY SIZE
+                        WS-CICS-RESP2-TEXT DELIMITED BY SIZE
+                                           INTO TSWMS-MSG-VAR2
+                 MOVE 'TS3154'                   TO TSWMS-MSG-CODE
+                 GO TO 9000-20-PROCESS-THE-ERROR
+              END-IF
+           END-IF
+           GO TO 8000-00-RETURN.
+
+           COPY TSTS1PMU.
+           COPY TSTS3PMS.
+
+      *****************************************************************
+      *    ACTUALIZACION DE SALDOS                                    *
+      *****************************************************************
+       6300-20-UPDATE-FIELDS.
+           MOVE WK-CUENTA               TO REG-LLAVE
+           EXEC CICS READ  DATASET(WS-ARCH)
+                           RIDFLD(REG-LLAVE)
+                           KEYLENGTH(WS-LONG-LLAVE)
+                           INTO (REG-SALDOS)
+                           LENGTH (WS-LONG-ARCH)
+                           RESP (RESPONSE-CODE)
+                           UPDATE
+           END-EXEC
+           PERFORM 7000-00-CHECK-CICS-STA
+           IF WK-VLR-RETIRO NOT NUMERIC
+              MOVE 'VLR RETIRO DEBE SER NUMERICO' TO TSWMS-MSG-VAR1
+              MOVE 'TS3154'                       TO TSWMS-MSG-CODE
+              GO TO 9000-20-PROCESS-THE-ERROR
+           END-IF
+           IF WK-VLR-RETIRO EQUAL ZEROS
+              MOVE 'VLR RETIRO NO PERMITIDO   ' TO TSWMS-MSG-VAR1
+              MOVE 'TS3154'                     TO TSWMS-MSG-CODE
+              GO TO 9000-20-PROCESS-THE-ERROR
+           END-IF
+      **   CALCULO DEL SALDO FINAL AL RESTAR EL VALOR DEL RETIRO
+           COMPUTE WS-CALCULO-SALDO = REG-VLR-SALDO - WK-VLR-RETIRO
+           IF WS-CALCULO-SALDO < ZERO
+              MOVE 'FONDOS INSUFICIENTES   ' TO TSWMS-MSG-VAR1
+              MOVE 'TS3154'                  TO TSWMS-MSG-CODE
+              GO TO 9000-20-PROCESS-THE-ERROR
+           ELSE
+              MOVE WS-CALCULO-SALDO          TO REG-VLR-SALDO
+                                                WK-VLR-RETIRO
+              MOVE REG-CUENTA                TO WK-CUENTA
+           END-IF
+           EXEC CICS REWRITE DATASET(WS-ARCH)
+                           FROM (REG-SALDOS)
+                           LENGTH (WS-LONG-ARCH)
+                           RESP (RESPONSE-CODE)
+           END-EXEC
+           PERFORM 7000-00-CHECK-CICS-STA.
+       6300-20-FIN. EXIT.
+
+      *****************************************************************
+      *    CONSULTA DE INFORMACION EN TABLA ARCUEN                    *
+      *****************************************************************
+       6300-40-INQUIR-FIELDS.
+           MOVE WK-CUENTA               TO REG-LLAVE
+           EXEC CICS READ  DATASET(WS-ARCH)
+                           RIDFLD(REG-LLAVE)
+                           KEYLENGTH(WS-LONG-LLAVE)
+                           INTO (REG-SALDOS)
+                           LENGTH (WS-LONG-ARCH)
+                           RESP (RESPONSE-CODE)
+           END-EXEC
+           PERFORM 7000-00-CHECK-CICS-STA
+           MOVE REG-CUENTA              TO SAL-CUENTA
+           MOVE REG-VLR-SALDO           TO SAL-SALDO
+           MOVE REG-SALIDA              TO WRK-INQ-PDA.
+       6300-40-FIN. EXIT.
+
+      *****************************************************************
+      *    VALIDACION DE RETORNOS CICS                                *
+      *****************************************************************
+       7000-00-CHECK-CICS-STA.
+           EVALUATE RESPONSE-CODE
+              WHEN  DFHRESP(NORMAL)
+                 CONTINUE
+              WHEN  DFHRESP(NOTFND)
+                 MOVE 'CUENTA NO EXISTE  '           TO TSWMS-MSG-VAR1
+                 MOVE 'TS3154'                       TO TSWMS-MSG-CODE
+                 GO TO 9000-20-PROCESS-THE-ERROR
+              WHEN  DFHRESP(IOERR)
+                 MOVE 'ERROR FISICO VSAM '           TO TSWMS-MSG-VAR1
+                 MOVE 'TS3154'                       TO TSWMS-MSG-CODE
+                 GO TO 9000-20-PROCESS-THE-ERROR
+              WHEN  DFHRESP(NOTOPEN)
+                 MOVE 'ERROR ARCHIVO NO ABIERTO '    TO TSWMS-MSG-VAR1
+                 MOVE 'TS3154'                       TO TSWMS-MSG-CODE
+                 GO TO 9000-20-PROCESS-THE-ERROR
+              WHEN  DFHRESP(DISABLED)
+                 MOVE 'ERROR ARCHIVO DESHABILITADO ' TO TSWMS-MSG-VAR1
+                 MOVE 'TS3154'                       TO TSWMS-MSG-CODE
+                 GO TO 9000-20-PROCESS-THE-ERROR
+              WHEN  OTHER
+                 MOVE 'ERROR GENERAL CONSUL/ESCRITU' TO TSWMS-MSG-VAR1
+                 MOVE 'TS3154'                       TO TSWMS-MSG-CODE
+                 GO TO 9000-20-PROCESS-THE-ERROR
+           END-EVALUATE.
+       7000-00-FIN. EXIT.
+
+      *****************************************************************
+      *    SALIDA DEL PROGRAMA                                        *
+      *****************************************************************
+       8000-00-RETURN.
+
+           EXEC CICS  RETURN
+                      END-EXEC.
+           GOBACK.
+           COPY TSTS3PCM.
+           EXIT.
+       9900-99-SERVICE-RELOAD.
+
+       9900-99-EXIT.
+           EXIT.

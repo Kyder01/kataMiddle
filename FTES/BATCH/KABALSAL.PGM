@@ -1,0 +1,265 @@
+       IDENTIFICATION DIVISION.
+       PROGRAM-ID. KABALSAL.
+       AUTHOR. DAVID ESTEBAN RESTREPO PARRA
+       INSTALLATION. BANCO DE BOGOTA.
+       DATE-WRITTEN. ABRIL 2026.
+       ENVIRONMENT DIVISION.
+       CONFIGURATION SECTION.
+       SOURCE-COMPUTER. IBM-4381.
+       OBJECT-COMPUTER. IBM-4381.
+      *****************************************************************
+      * PROGRAMA QUE LEE ARCHIVO DE MOVIMIENTOS Y AGRUPA SALDOS DE LAS*
+      * CUENTAS - GENERA ARCHIVO DE RECHAZOS CON MOVS NO APLICADOS POR*
+      * FONDOS INSUFICIENTES                                          *
+      *****************************************************************
+       INPUT-OUTPUT SECTION.
+       FILE-CONTROL.
+       DATA DIVISION.
+       WORKING-STORAGE SECTION.
+       77  SI-MODULE-INFO               PIC X(64)
+           VALUE 'KABALSAL  -----TSD-             01/03/23  17.13.01'.
+       77  ST-ENTRADA                   PIC X(02)  VALUE SPACES.
+       77  WS-MOVS-LEIDOS               PIC 9(07)  VALUE ZEROS.
+       77  WS-FIN-ARC                   PIC 9      VALUE ZEROS.
+       77  WS-GRABADOS                  PIC 9(07)  VALUE ZEROS.
+       77  WS-CUENTA-ANT                PIC X(09)  VALUE ZEROS.
+       77  WS-CNT-RECH                  PIC 9(07)  VALUE ZEROS.
+       77  WS-CONT-ERR                  PIC 9      VALUE ZEROS.
+       77  WS-CONT-ESPACIO              PIC 99     VALUE ZEROS.
+       77  WS-ERR-CUENTA                PIC X(20)
+                                          VALUE 'NUM CUENTA INVALIDO '.
+       77  WS-ERR-NUM                   PIC X(20)
+                                          VALUE 'VALOR NO ES NUMERICO'.
+       77  WS-ERR-TMOV                  PIC X(20)
+                                          VALUE 'TIPO MOV NO VALIDO  '.
+       77  WS-ERR-FONDOS                PIC X(20)
+                                          VALUE 'FONDOS INSUFICIENTES'.
+       77  WS-VLR-MOV                   PIC 9(13)V99  VALUE ZEROS.
+       01  WS-VLR-MOV-A.
+           03 VLR-MOV-AE                PIC 9(13)     VALUE ZEROS.
+           03 VLR-MOV-AD                PIC 99        VALUE ZEROS.
+       77  WS-TOT-MOV                   PIC S9(13)V99 VALUE ZEROS.
+       77  WS-TOT-MOV-AUX               PIC S9(13)V99 VALUE ZEROS.
+       77  WS-FLG-ISNUM                 PIC X         VALUE ZEROS.
+       77  WS-FLG-REG-GRAB              PIC X         VALUE ZEROS.
+
+       01 REG-ENTRADA.
+          03 ENT-CUENTA                 PIC X(9).
+          03 ENT-SEP1                   PIC X.
+          03 ENT-TIPO-MOV               PIC X.
+          03 ENT-SEP2                   PIC X.
+          03 ENT-VLR-MOV                PIC 9(13)V99.
+
+       01 REG-SALIDA.
+          03 SAL-CUENTA                 PIC X(9).
+          03 SAL-SEP1                   PIC X     VALUE '|'.
+          03 SAL-DESC-SALDO             PIC X(5)  VALUE 'SALDO'.
+          03 SAL-SEP2                   PIC X     VALUE '|'.
+          03 SAL-VLR-TOT                PIC 9(13)V99.
+          03 FILLER                     PIC X(69) VALUE SPACES.
+
+       01 REG-RECHAZOS.
+          03 REC-CUENTA                 PIC X(9).
+          03 REC-SEP1                   PIC X     VALUE '|'.
+          03 REC-TIPO-MOV               PIC X.
+          03 REC-SEP2                   PIC X     VALUE '|'.
+          03 REC-VLR-MOV                PIC X(15).
+          03 REC-SEP3                   PIC X     VALUE '|'.
+          03 REC-DESC-RECH              PIC X(20) VALUE SPACES.
+          03 FILLER                     PIC X(52) VALUE SPACES.
+
+      *****************************************************************
+      * AREA DE COPYS
+      *****************************************************************
+           COPY SIWSCNTL.
+      *****************************************************************
+      * RUTINA PRINCIPAL
+      *****************************************************************
+       PROCEDURE DIVISION.
+           PERFORM 1000-ABRIR-ARCHIVOS  THRU 1000-FIN
+           PERFORM 2000-LEER-ENTRADA    THRU 2000-FIN
+           MOVE    ENT-CUENTA             TO WS-CUENTA-ANT
+           PERFORM 3000-PROCESO         THRU 3000-FIN
+                                          UNTIL WS-FIN-ARC = 1
+           DISPLAY 'REGISTROS LEIDOS DE MOVS    : ' WS-MOVS-LEIDOS
+           DISPLAY 'REGISTROS GRABADOS RECHAZOS : ' WS-CNT-RECH
+           DISPLAY 'REGISTROS GRABADOS OK       : ' WS-GRABADOS
+           PERFORM 9000-CERRAR-ARCHIVOS THRU 9000-FIN
+           STOP RUN.
+
+      ****************************************************************
+      * APERTURA DE ARCHIVOS                                         *
+      ****************************************************************
+       1000-ABRIR-ARCHIVOS.
+           MOVE 'I'          TO I-O-CONTROL-ACCESS.
+           MOVE 'O'          TO I-O-CONTROL-OPERATOR.
+           CALL 'STRECHS' USING I-O-CONTROL-AREA
+                                REG-ENTRADA.
+           MOVE 'O'          TO I-O-CONTROL-ACCESS.
+           MOVE 'O'          TO I-O-CONTROL-OPERATOR.
+           CALL 'ST2X10S' USING I-O-CONTROL-AREA
+                                REG-SALIDA.
+           MOVE 'O'          TO I-O-CONTROL-ACCESS.
+           MOVE 'O'          TO I-O-CONTROL-OPERATOR.
+           CALL 'IMSBPRS' USING I-O-CONTROL-AREA
+                                REG-RECHAZOS.
+       1000-FIN. EXIT.
+
+      ****************************************************************
+      * LECTURA ARCHIVO ENTRADA                                      *
+      ****************************************************************
+       2000-LEER-ENTRADA.
+           MOVE 'I'          TO I-O-CONTROL-ACCESS.
+           MOVE 'R'          TO I-O-CONTROL-OPERATOR.
+           CALL 'STRECHS' USING I-O-CONTROL-AREA
+                                REG-ENTRADA.
+           IF I-O-88-END-OF-FILE
+              MOVE 1 TO WS-FIN-ARC
+              PERFORM 4000-GRABA-REGISTRO    THRU 4000-FIN
+           ELSE
+              ADD  1 TO WS-MOVS-LEIDOS
+           END-IF.
+       2000-FIN. EXIT.
+
+      ****************************************************************
+      * PROCESO                                                      *
+      ****************************************************************
+       3000-PROCESO.
+           PERFORM 2500-VALIDAR-ENTRADA      THRU 2500-FIN
+           IF (WS-CONT-ERR > 0)
+              PERFORM 4500-GRABAR-RECHAZO    THRU 4500-FIN
+           ELSE
+              IF (WS-CUENTA-ANT NOT EQUAL ZEROS AND
+                  WS-CUENTA-ANT NOT EQUAL SPACES)
+                 IF (ENT-CUENTA EQUAL WS-CUENTA-ANT)
+                    CONTINUE
+                 ELSE
+                    IF WS-FLG-REG-GRAB EQUAL '1'
+                       PERFORM 4000-GRABA-REGISTRO THRU 4000-FIN
+                    ELSE
+      *                ACTUALIZO CUENTA ANTERIOR
+                       MOVE ENT-CUENTA    TO WS-CUENTA-ANT
+      *                REINICIO LAS VARIABLES DE TOTALES Y FLAG
+                       MOVE ZEROS         TO WS-TOT-MOV
+                                             WS-TOT-MOV-AUX
+                                             WS-FLG-REG-GRAB
+                    END-IF
+                 END-IF
+              ELSE
+                 MOVE ENT-CUENTA TO WS-CUENTA-ANT
+              END-IF
+              PERFORM 3500-TOTALIZAR-CUENTAS       THRU 3500-FIN
+           END-IF
+           PERFORM 2000-LEER-ENTRADA         THRU 2000-FIN.
+       3000-FIN.  EXIT.
+
+      ****************************************************************
+      * VALIDACION ARCHIVO DE ENTRADA                                *
+      ****************************************************************
+       2500-VALIDAR-ENTRADA.
+           MOVE ZEROS             TO WS-CONT-ERR
+                                     WS-CONT-ESPACIO
+                                     WS-VLR-MOV
+                                     WS-FLG-ISNUM
+           INSPECT ENT-CUENTA
+                TALLYING WS-CONT-ESPACIO FOR ALL SPACES.
+           IF (WS-CONT-ESPACIO > 0)
+               ADD  1             TO WS-CONT-ERR
+               MOVE WS-ERR-CUENTA TO REC-DESC-RECH
+           END-IF
+           IF (ENT-VLR-MOV IS NOT NUMERIC)
+               ADD  1             TO WS-CONT-ERR
+               MOVE WS-ERR-NUM    TO REC-DESC-RECH
+               MOVE ENT-VLR-MOV   TO WS-VLR-MOV-A
+               MOVE VLR-MOV-AE    TO REC-VLR-MOV(1:13)
+               MOVE VLR-MOV-AD    TO REC-VLR-MOV(14:2)
+               MOVE '1'           TO WS-FLG-ISNUM
+           ELSE
+               MOVE ENT-VLR-MOV   TO WS-VLR-MOV
+           END-IF
+           IF (ENT-TIPO-MOV NOT EQUAL 'D' AND
+               ENT-TIPO-MOV NOT EQUAL 'W')
+               ADD  1             TO WS-CONT-ERR
+               MOVE WS-ERR-TMOV   TO REC-DESC-RECH
+           END-IF.
+       2500-FIN. EXIT.
+
+      ****************************************************************
+      * SE TOTALIZAN LOS VALORES POR CUENTA                          *
+      ****************************************************************
+       3500-TOTALIZAR-CUENTAS.
+           IF ENT-TIPO-MOV EQUAL 'D'
+              MOVE '1'        TO WS-FLG-REG-GRAB
+              COMPUTE WS-TOT-MOV = WS-TOT-MOV + ENT-VLR-MOV
+              MOVE WS-TOT-MOV TO WS-TOT-MOV-AUX
+           END-IF
+           IF ENT-TIPO-MOV EQUAL 'W'
+              COMPUTE WS-TOT-MOV-AUX = WS-TOT-MOV - ENT-VLR-MOV
+              IF WS-TOT-MOV-AUX < ZERO
+                 MOVE WS-TOT-MOV               TO WS-TOT-MOV-AUX
+                 MOVE WS-ERR-FONDOS            TO REC-DESC-RECH
+                 PERFORM 4500-GRABAR-RECHAZO THRU 4500-FIN
+              ELSE
+                 MOVE WS-TOT-MOV-AUX           TO WS-TOT-MOV
+              END-IF
+           END-IF.
+       3500-FIN. EXIT.
+
+      ****************************************************************
+      * SE ESCRIBE EL REGISTRO CONTROLES Y RESTO DE INFORMACION      *
+      ****************************************************************
+       4000-GRABA-REGISTRO.
+           INITIALIZE REG-SALIDA
+           MOVE WS-CUENTA-ANT TO SAL-CUENTA
+           MOVE WS-TOT-MOV    TO SAL-VLR-TOT
+           MOVE '|'           TO SAL-SEP1
+                                 SAL-SEP2
+           MOVE 'SALDO'       TO SAL-DESC-SALDO
+           MOVE 'O'           TO I-O-CONTROL-ACCESS
+           MOVE 'L'           TO I-O-CONTROL-OPERATOR
+           CALL 'ST2X10S'  USING I-O-CONTROL-AREA
+                                 REG-SALIDA
+      *    ACTUALIZO CUENTA ANTERIOR
+           MOVE ENT-CUENTA    TO WS-CUENTA-ANT
+      *    REINICIO LAS VARIABLES DE TOTALES Y FLAG
+           MOVE ZEROS         TO WS-TOT-MOV
+                                 WS-TOT-MOV-AUX
+                                 WS-FLG-REG-GRAB
+           ADD  1             TO WS-GRABADOS.
+       4000-FIN. EXIT.
+
+      ****************************************************************
+      * GRABA REGISTRO RECHAZOS                                      *
+      ****************************************************************
+       4500-GRABAR-RECHAZO.
+           MOVE ENT-CUENTA   TO REC-CUENTA
+           MOVE ENT-TIPO-MOV TO REC-TIPO-MOV
+           IF WS-FLG-ISNUM EQUAL ZERO
+              MOVE WS-VLR-MOV   TO WS-VLR-MOV-A
+              MOVE VLR-MOV-AE   TO REC-VLR-MOV(1:13)
+              MOVE VLR-MOV-AD   TO REC-VLR-MOV(14:2)
+           END-IF
+           MOVE 'O'          TO I-O-CONTROL-ACCESS
+           MOVE 'L'          TO I-O-CONTROL-OPERATOR
+           CALL 'IMSBPRS' USING I-O-CONTROL-AREA
+                                REG-RECHAZOS
+           ADD 1             TO WS-CNT-RECH.
+       4500-FIN. EXIT.
+
+      ****************************************************************
+      * RUTINA PARA CERRAR ARCHIVOS                                  *
+      ****************************************************************
+       9000-CERRAR-ARCHIVOS.
+           MOVE 'I'          TO I-O-CONTROL-ACCESS.
+           MOVE 'E'          TO I-O-CONTROL-OPERATOR.
+           CALL 'STRECHS' USING I-O-CONTROL-AREA
+                                REG-ENTRADA.
+           MOVE 'O'          TO I-O-CONTROL-ACCESS.
+           MOVE 'E'          TO I-O-CONTROL-OPERATOR.
+           CALL 'ST2X10S' USING I-O-CONTROL-AREA
+                                REG-SALIDA.
+           MOVE 'O'          TO I-O-CONTROL-ACCESS.
+           MOVE 'E'          TO I-O-CONTROL-OPERATOR.
+           CALL 'IMSBPRS' USING I-O-CONTROL-AREA
+                                REG-RECHAZOS.
+       9000-FIN. EXIT.

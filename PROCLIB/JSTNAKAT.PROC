@@ -1,0 +1,124 @@
+//JSTNAKAT PROC
+//********************************************************************
+//* STEP STKAT000 PGM=IPCPBTCH                                       *
+//*      CIERRA ARCHIVO LINEA ARCUEN EN CBBP1#01                     *
+//********************************************************************
+//STKAT000 EXEC  PGM=IPCPBTCH
+//STEPLIB  DD DSN=IPCP.IPCP46A.LOADLIB,DISP=SHR
+//IPCPCDS  DD DSN=IPCP.V4R6.COMMAND.DATASET,DISP=SHR
+//AUDIT    DD SYSOUT=*
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT000),DISP=SHR
+//********************************************************************
+//* STEP STKAT010   PGM=IDCAMS                                       *
+//*      BORRADO DE ARCHIVOS DE TRABAJO                              *
+//********************************************************************
+//STKAT010 EXEC PGM=IDCAMS,COND=(4,LE)
+//SYSPRINT DD SYSOUT=*
+//SYSUDUMP DD SYSOUT=X
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT010),DISP=SHR
+//********************************************************************
+//*  STEP STKAT020  PGM=SORT                                         *
+//*       SE ORDENA EL ARCHIVO DE ENTRADA POR CUENTA Y TIPO DE MOV   *
+//*       DEPOSITOS PRIMERO                                          *
+//********************************************************************
+//STKAT020 EXEC PGM=SORT,COND=(4,LT),PARM=('DYNALLOC=(SYSDA,255)')
+//SORTLIB  DD DSN=SYS1.SORTLIB,DISP=SHR
+//SYSOUT   DD SYSOUT=*
+//SORTIN   DD DSN=S&HLQ..ST.NA.BA.MVTOS.KATA.S,DISP=SHR
+//SORTOUT  DD UNIT=(SYSDA,2),SPACE=(CYL,(200,100),RLSE),DCB=(MODEL,
+//            RECFM=FB,LRECL=100,BLKSIZE=0),
+//            DSN=S&HLQ..ST.NA.BA.MVTOS.KATA.SORT.S,DISP=(NEW,CATLG,
+//            DELETE)
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT020),DISP=SHR
+//********************************************************************
+//*  STEP STKAT030  PGM=KABALSAL                                     *
+//*       SE REALIZA BALANCE DE LOS SALDOS Y SE GENERA ARCHIVO CON   *
+//*       CUENTAS OK Y ARCHIVO CON MOVS RECHAZADOS POR FONDOS        *
+//********************************************************************
+//STKAT030 EXEC PGM=KABALSAL,COND=(4,LT)
+//SYSOUT   DD SYSOUT=*
+//SYSDBOUT DD SYSOUT=*
+//SYSUDUMP DD SYSOUT=X
+//SYSPRINT DD SYSOUT=*
+//STRECHI  DD DSN=S&HLQ..ST.NA.BA.MVTOS.KATA.SORT.S,DISP=SHR
+//ST2X10O  DD UNIT=(SYSDA,2),SPACE=(CYL,(200,100),RLSE),DCB=(MODEL,
+//            RECFM=FB,LRECL=100,BLKSIZE=0),
+//            DSN=S&HLQ..ST.NA.BA.KATA.SALDOS.S,DISP=(NEW,CATLG,
+//            DELETE)
+//IMSBPRO  DD UNIT=(SYSDA),SPACE=(CYL,(150,50),RLSE),DCB=(MODEL,
+//            RECFM=FB,LRECL=100,BLKSIZE=0),
+//            DSN=S&HLQ..ST.NA.BA.KATA.RECHAZOS.S,
+//            DISP=(NEW,CATLG,DELETE)
+//********************************************************************
+//*  STEP STKAT040   PGM=SORT                                        *
+//*       ELIMINACION DE PIPELINES DEL REPORTE BATCH PARA DEJAR      *
+//*       ARCHIVO LISTO PARA SUBIDA A LINEA                          *
+//********************************************************************
+//STKAT040 EXEC PGM=SORT,COND=(4,LT),PARM=('DYNALLOC=(SYSDA,255)')      AH205541
+//SORTLIB  DD DSN=SYS1.SORTLIB,DISP=SHR
+//SYSOUT   DD SYSOUT=*
+//SORTIN   DD DSN=S&HLQ..ST.NA.BA.KATA.SALDOS.S,DISP=SHR
+//SORTOUT  DD UNIT=(SYSDA,2),SPACE=(CYL,(200,100),RLSE),DCB=(MODEL,
+//            RECFM=FB,LRECL=100,BLKSIZE=0),
+//            DSN=S&HLQ..ST.NA.BA.KATA.SALDOS.DEF.S,DISP=(NEW,CATLG,
+//            DELETE)
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT040),DISP=SHR
+//********************************************************************
+//*  STEP STKAT050   PGM=IDCAMS                                      *
+//*       DEFINICION DEL ARCHIVO BACKUP DE LINEA                     *
+//********************************************************************
+//STKAT050 EXEC PGM=IDCAMS,COND=(4,LT)
+//SYSPRINT DD SYSOUT=*
+//SYSUDUMP DD SYSOUT=X
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT050),DISP=SHR
+//********************************************************************
+//*  STEP STKAT060   PGM=IDCAMS                                      *
+//*       REPRO PARA REALIZAR BACKUP ARCHIVO DE LINEA                *
+//********************************************************************
+//STKAT060 EXEC PGM=IDCAMS,COND=(4,LT)
+//SYSPRINT DD SYSOUT=*
+//SYSUDUMP DD SYSOUT=X
+//DD1      DD DSN=S&HLQ..ST.KA.BK.ARCUEN.V,DISP=SHR
+//DD2      DD DSN=S&HLO..ST.KA.OL.ARCUEN.V,DISP=SHR
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT060),DISP=SHR
+//********************************************************************
+//*  STEP STKAT070   PGM=IDCAMS                                      *
+//*       DEFINICION DEL ARCHIVO DE LINEA                            *
+//********************************************************************
+//STKAT070 EXEC PGM=IDCAMS,COND=(4,LT)
+//SYSPRINT DD SYSOUT=*
+//SYSUDUMP DD SYSOUT=X
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT070),DISP=SHR
+//********************************************************************
+//*  STEP STKAT080   PGM=IDCAMS                                      *
+//*       REPRO DEL ARCHIVO PARA LINEA                               *
+//********************************************************************
+//STKAT080 EXEC PGM=IDCAMS,COND=(4,LT)
+//SYSPRINT DD SYSOUT=*
+//SYSUDUMP DD SYSOUT=X
+//DD1      DD DSN=S&HLO..ST.KA.OL.ARCUEN.V,DISP=SHR
+//DD2      DD DSN=S&HLQ..ST.NA.BA.KATA.SALDOS.DEF.S,DISP=SHR
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT060),DISP=SHR
+//********************************************************************
+//*  STEP STKAT090   PGM=SORT                                        *
+//*       SEPARA RECHAZOS POR FONDOS INSUFICIENTES PARA ENVIAR A     *
+//*       PROCESO DE DEBITOS PENDIENTES                              *
+//********************************************************************
+//STKAT090 EXEC PGM=SORT,COND=(4,LT),PARM=('DYNALLOC=(SYSDA,255)')      AH205541
+//SORTLIB  DD DSN=SYS1.SORTLIB,DISP=SHR
+//SYSOUT   DD SYSOUT=*
+//SORTIN   DD DSN=S&HLQ..ST.NA.BA.KATA.RECHAZOS.S,DISP=SHR
+//SORTOUT  DD UNIT=(SYSDA),SPACE=(CYL,(100,50),RLSE),DCB=(MODEL,
+//            RECFM=FB,LRECL=100,BLKSIZE=0),
+//            DSN=S&HLQ..ST.NA.BA.KATA.DEBPEN.S,DISP=(NEW,CATLG,
+//            DELETE)
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT090),DISP=SHR
+//********************************************************************  00030027
+//* STEP STKAT100 PGM=IPCPBTCH                                       *  00040027
+//*      ABRE ARCHIVO LINEA ARCUEN EN CBBP1#01                       *  00050031
+//********************************************************************  00060027
+//STKAT100 EXEC  PGM=IPCPBTCH,COND=(4,LT)                               00070027
+//STEPLIB  DD DSN=IPCP.IPCP46A.LOADLIB,DISP=SHR                         00080027
+//IPCPCDS  DD DSN=IPCP.V4R6.COMMAND.DATASET,DISP=SHR                    00090027
+//AUDIT    DD SYSOUT=*                                                  00100027
+//SYSIN    DD DSN=S&HLQ..SS.NA.LY.PARMLIB1(STKAT100),DISP=SHR           08/01/98
